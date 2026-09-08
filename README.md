@@ -1,41 +1,50 @@
-# A Locational Price and Carbon Intensity-Aware Charger Allocation and Charge–Discharge Scheduling Strategy for Eco-smart Electric Vehicles
+# EV Charging Project
 
-Code and data for the paper *"A Locational Price and Carbon Intensity-Aware
-Charger Allocation and Charge–Discharge Scheduling Strategy for Eco-smart
-Electric Vehicles"* (Jung, Dash, and Srinivasan, 2026).
+Code and data for *A Locational Price and Carbon Intensity-Aware Charger
+Allocation and Charge-Discharge Scheduling Strategy for Electric Vehicle
+Fleets* (Jung, Dash, and Srinivasan, 2026).
 
-A multi-objective EV charging scheduler that trades off **electricity cost**
-against **carbon emissions** using real CAISO nodal price data and per-node grid
-carbon intensity. The two signals are combined into a single Integrated Charging
-Signal (ICS), weighted by α (cost) and β (carbon).
+The scheduler trades electricity cost against carbon emissions using CAISO
+nodal prices and per-node grid carbon intensity. The two signals are normalised
+by their maxima and combined into one Integrated Charging Signal (ICS),
+weighted by alpha for cost and beta for carbon, with alpha + beta = 1.
 
-The pipeline has two stages. First, a capacity-aware greedy procedure assigns
-each EV to a charging node subject to a distance cap, per-node power limits, and
-energy-throughput feasibility. Then a linear program schedules charging — and
-optional vehicle-to-grid (V2G) discharging — over a 24-hour horizon, with a
-linear battery-degradation cost and a soft, β-scaled carbon cap. The model is
-evaluated under four schemes (Uncoordinated baseline, Cost-only, Carbon-only,
-Balanced) plus a Pareto sweep, and all figures and tables are generated
-automatically.
+The pipeline runs in two stages:
 
-On a synthetic 30-EV fleet across 4 CAISO nodes, the balanced scheme (α = β =
-0.5) cuts electricity cost by 39.6% and carbon emissions by 21.6% relative to the
-uncoordinated baseline.
+1. **Charger allocation.** A capacity-aware greedy procedure assigns each EV to
+   a charging node, subject to a distance cap, per-node peak power, and
+   energy-throughput feasibility over the EV's parking window.
+2. **LP scheduling.** With those assignments fixed, a linear program sets the
+   charge and vehicle-to-grid discharge profile of every EV over a 24-hour
+   horizon, with a linear battery degradation cost and a soft carbon cap that
+   tightens as beta rises.
 
-## Requirements
+## Results
 
-- Python 3
-- Dependencies (installed in the bundled `venv/`): `pandas`, `numpy`,
-  `matplotlib`, and an LP solver (`pulp`).
+Three schemes are evaluated against an uncoordinated baseline that charges each
+EV at full power on arrival at its nearest node. Total cost is energy cost plus
+battery degradation, which is what the LP minimises.
+
+| Strategy | Total ($) | Energy ($) | Deg. ($) | Savings (%) | Emissions (g CO2) | Reduction (%) |
+|---|---:|---:|---:|---:|---:|---:|
+| Uncoordinated | 20.57 | 20.57 | 0.00 | - | 130,698.68 | - |
+| Cost-only (alpha=1) | 13.67 | 11.83 | 1.84 | 33.6 | 115,465.27 | 11.7 |
+| Carbon-only (beta=1) | 19.26 | 16.86 | 2.40 | 6.4 | 98,670.32 | 24.5 |
+| Balanced (alpha=beta=0.5) | 14.74 | 12.42 | 2.32 | 28.4 | 102,494.53 | 21.6 |
+
+The balanced scheme cuts total operating cost by 28.4% and carbon emissions by
+21.6% at the same time. Sweeping alpha from 0 to 1 in steps of 0.05 traces the
+full trade-off frontier, with the knee near the balanced point.
 
 ## Setup
 
 ```bash
-# from the project root
 python3 -m venv venv
 source venv/bin/activate
 pip install pandas numpy matplotlib pulp
 ```
+
+PuLP ships the CBC solver, so no separate solver install is needed.
 
 ## Usage
 
@@ -43,70 +52,68 @@ pip install pandas numpy matplotlib pulp
 python3 main.py
 ```
 
-This will:
-
-1. Load data — CAISO nodal prices, per-node carbon intensity, and the EV fleet.
-2. Print grid positions for charging nodes and EVs.
-3. Run the **Balanced** scheme (α = β = 0.5) as the primary schedule and print a
-   detailed per-EV report (node assignments, distances, metrics vs. baseline).
-4. Run all four evaluation schemes and the Pareto sweep.
-5. Print the four-scheme summary table.
-6. Generate all figures and the performance table into `plots/`.
+The run prints the fleet and node inputs, solves the baseline, the three
+schemes and the 21-point sweep, reports the balanced assignment against the
+baseline, and writes every figure and the performance table to `plots/`. It
+takes under a minute on a laptop.
 
 ## Configuration
 
-Edit the `CONFIG` block near the top of `main.py` to change global parameters:
+Edit `CONFIG` at the top of `main.py`:
 
-| Parameter | Meaning |
-|---|---|
-| `n_nodes` | Number of CAISO nodes used |
-| `periods` | Scheduling horizon (hours) |
-| `carbon_cap_fraction` | Soft carbon cap as a fraction of the uncoordinated baseline |
-| `v2g_enabled` | Enable vehicle-to-grid discharging |
-| `eta_c` / `eta_d` | Charge / discharge efficiency |
-| `deg_cost` | Battery degradation cost ($/kWh discharged) |
-| `grid_cap_kw` | Per-node power cap (kW) |
-| `max_distance` | Max EV-to-node distance (grid units) |
-| `out_dir` | Output directory for figures/tables |
+| Parameter | Meaning | Paper value |
+|---|---|---|
+| `n_nodes` | CAISO nodes used | 4 |
+| `periods` | Scheduling horizon, hours | 24 |
+| `cap_fraction` | Tightest carbon cap, as a fraction of the baseline | 0.85 |
+| `v2g_enabled` | Allow vehicle-to-grid discharging | True |
+| `eta_c` / `eta_d` | Charging / discharging efficiency | 0.95 |
+| `deg_cost` | Battery degradation, $/kWh discharged | 0.02 |
+| `grid_cap_kw` | Per-node power cap, kW | 85.0 |
+| `interval_hours` | Length of one period | 1.0 |
+| `max_distance` | Furthest an EV may be assigned, grid units | 4.0 |
+| `out_dir` | Where figures and tables are written | `plots` |
 
-**To change which carbon-intensity date each node uses**, edit the
-`NODE_DATE_MAP` dict near the top of `scheduler/data_loader.py`.
-
-The values used for the paper are: 30 EVs, 4 nodes, 24-hour horizon, node power
-cap 85 kW, max assignment distance 4.0 grid units, charge/discharge efficiency
-0.95, max charge 12 kW, max discharge 4 kW, degradation cost \$0.02/kWh, and a
-carbon-cap fraction of 0.85.
+Per-EV limits come from `data/ev_infoV5.csv` and default to a 40 kWh battery,
+12 kW charging and 4 kW discharging. To change which carbon date a node uses,
+edit `NODE_DATE_MAP` in `scheduler/data_loader.py`.
 
 ## Data
 
-- **LMP prices** — CAISO day-ahead market via the Open Access Same-Time
-  Information System (OASIS), trade date Feb 18, 2026, for four nodes:
+- **LMP prices** (`data/caiso.csv`): CAISO day-ahead market via OASIS, trade
+  date 18 February 2026. Four nodes are used, chosen for price diversity:
   `CLAP_BUNDLD`, `POD_DUTCH1_7_UNIT 1`, `POD_SLST13_2_SOLAR1`, `ALAMIT_2_PL1X3`.
-- **Carbon intensity** — CAISO Average Emissions Rate report (Feb 2026); each
-  node is assigned one day's profile (Feb 17–20) via `NODE_DATE_MAP`.
+  They sit at symmetric positions on a synthetic 10x10 grid rather than at
+  their true geographic locations.
+- **Carbon intensity** (`data/carbon_intensity.csv`): CAISO average emissions
+  rate report, February 2026. CAISO publishes one California-wide average, so
+  each node is given a distinct daily profile: 17 to 20 February map to the
+  four nodes in the order above.
+- **EV fleet** (`data/ev_infoV5.csv`): 30 synthetic vehicles differing in
+  initial state of charge, arrival and departure time, and grid position.
 
-## Project layout
+## Layout
 
 ```
-.
-├── main.py                  # Entry point (config + orchestration)
-├── data/
-│   ├── caiso.csv            # CAISO nodal price data
-│   ├── carbon_intensity.csv # Per-node carbon intensity profiles
-│   └── ev_infoV5.csv        # EV fleet specs
-├── scheduler/
-│   ├── data_loader.py       # Loads prices, carbon, EVs; node/date mapping
-│   ├── model.py             # Node assignment, LP scheduler, baseline, metrics
-│   ├── results.py           # Runs all schemes + Pareto sweep
-│   └── plot.py              # Figure and performance-table generation
-└── plots/                   # Generated PDFs + performance_table.{csv,tex}
+main.py                      entry point, config and reporting
+scheduler/data_loader.py     prices, carbon intensity and fleet
+scheduler/model.py           allocation, LP scheduler, baseline, metrics
+scheduler/results.py         the four schemes and the alpha sweep
+scheduler/plot.py            figures and the performance table
+data/                        input CSVs
+plots/                       generated figures and tables
 ```
 
-## Outputs (`plots/`)
+## Outputs
 
-- `fig_pareto.pdf` — cost vs. carbon Pareto frontier
-- `fig_carbon_overlay.pdf`, `fig_nodal_carbon.pdf` — carbon intensity over time / by node
-- `fig_cost_price_overlay.pdf`, `fig_nodal_prices.pdf` — nodal electricity prices
-- `fig_grid_map.pdf`, `grid_positions.pdf` — network topology / node & EV positions
-- `fig_balanced_node_profiles.pdf` — charging profiles under the balanced scheme
-- `performance_table.csv` / `performance_table.tex` — summary metrics table
+| File | Contents |
+|---|---|
+| `fig_nodal_prices.pdf` | Nodal LMP over the day |
+| `fig_nodal_carbon.pdf` | Nodal carbon intensity over the day |
+| `grid_positions.pdf` | EV and charging node positions |
+| `fig_cost_price_overlay.pdf` | Per-node net load against LMP, cost-only scheme |
+| `fig_carbon_overlay.pdf` | Per-node net load against carbon intensity, carbon-only scheme |
+| `fig_grid_map.pdf` | EV to node assignment, balanced scheme |
+| `fig_balanced_node_profiles.pdf` | Per-EV and per-node power, balanced scheme |
+| `fig_pareto.pdf` | Cost against emissions frontier over alpha |
+| `performance_table.csv` / `.tex` | The results table above |
