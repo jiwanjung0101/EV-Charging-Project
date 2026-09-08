@@ -1,6 +1,4 @@
-# EV Charging Project
-
-Code and data for *A Locational Price and Carbon Intensity-Aware Charger
+# A Locational Price and Carbon Intensity-Aware Charger
 Allocation and Charge-Discharge Scheduling Strategy for Electric Vehicle
 Fleets* (Jung, Dash, and Srinivasan, 2026).
 
