@@ -1,5 +1,4 @@
-# A Locational Price and Carbon Intensity-Aware Charger Allocation and Charge-Discharge Scheduling Strategy for Electric Vehicle Fleets* 
-(Jung, Dash, and Srinivasan, 2026).
+# A Locational Price and Carbon Intensity-Aware Charger Allocation and Charge-Discharge Scheduling Strategy for Electric Vehicle Fleets 
 
 The scheduler trades electricity cost against carbon emissions using CAISO
 nodal prices and per-node grid carbon intensity. The two signals are normalised
